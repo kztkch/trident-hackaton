@@ -6,6 +6,7 @@ import java.util.Map;
 
 import org.apache.commons.collections.MapUtils;
 
+import backtype.storm.Config;
 import storm.trident.TridentTopology;
 import storm.trident.operation.Aggregator;
 import storm.trident.operation.BaseFunction;
@@ -15,6 +16,7 @@ import storm.trident.operation.TridentOperationContext;
 import storm.trident.operation.builtin.Count;
 import storm.trident.tuple.TridentTuple;
 import backtype.storm.LocalDRPC;
+import backtype.storm.LocalCluster;
 import backtype.storm.generated.StormTopology;
 import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Values;
@@ -120,63 +122,63 @@ public class Demo {
 		// Also, Spouts are "batched".
 		TridentTopology topology = new TridentTopology();
 
-		// Each primitive allows us to apply either filters or functions to the stream
-		// We always have to select the input fields.
-		topology.newStream("filter", spout).each(new Fields("text", "actor"), new PereTweetsFilter())
-		    .each(new Fields("text", "actor"), new Utils.PrintFilter());
-
-		// Functions describe their output fields, which are always appended to the input fields.
-		topology.newStream("function", spout)
-		    .each(new Fields("text", "actor"), new UppercaseFunction(), new Fields("uppercased_text"))
-		    .each(new Fields("text", "uppercased_text"), new Utils.PrintFilter());
-
-		// As you see, Each operations can be chained.
-
-		// Stream can be parallelized with "parallelismHint"
-		// Parallelism hint is applied downwards until a partitioning operation (we will see this later).
-		// This topology creates 5 spouts and 5 bolts:
-		// Let's debug that with TridentOperationContext . partitionIndex !
-		topology.newStream("parallel", spout).each(new Fields("text", "actor"), new PereTweetsFilter())
-		    .parallelismHint(5).each(new Fields("text", "actor"), new Utils.PrintFilter());
-
-		// A stream can be partitioned in various ways.
-		// Let's partition it by "actor". What happens with previous example?
-		topology.newStream("parallel_and_partitioned", spout).partitionBy(new Fields("actor"))
-		    .each(new Fields("text", "actor"), new PereTweetsFilter()).parallelismHint(5)
-		    .each(new Fields("text", "actor"), new Utils.PrintFilter());
-
-		// Only one partition is filtering, which makes sense for the case.
-		// If we remove the partitionBy we get the previous behavior.
-
-		// Before we have parallelism = 5 everywhere. What if we want only one spout?
-		// We need to specify a partitioning policy for that to happen.
-		// (We said that parallelism hint is applied downwards until a partitioning operation is found).
-
-		// But if we don't want to partition by any field, we can just use shuffle()
-		// We could also choose global() - with care!
-		topology.newStream("parallel_and_partitioned", spout).parallelismHint(1).shuffle()
-		    .each(new Fields("text", "actor"), new PereTweetsFilter()).parallelismHint(5)
-		    .each(new Fields("text", "actor"), new Utils.PrintFilter());
-
-		// Because data is batched, we can aggregate batches for efficiency.
-		// The aggregate primitive aggregates one full batch. Useful if we want to persist the result of each batch only
-		// once.
-		// The aggregation for each batch is executed in a random partition as can be seen:
-		topology.newStream("aggregation", spout).parallelismHint(1)
-		    .aggregate(new Fields("location"), new LocationAggregator(), new Fields("aggregated_result"))
-		    .parallelismHint(5).each(new Fields("aggregated_result"), new Utils.PrintFilter());
-
-		// The partitionAggregate on the other hand only executes the aggregator within one partition's part of the batch.
-		// Let's debug that with TridentOperationContext . partitionIndex !
-		topology
-		    .newStream("partial_aggregation", spout)
-		    .parallelismHint(1)
-		    .shuffle()
-		    .partitionAggregate(new Fields("location"), new LocationAggregator(),
-		        new Fields("aggregated_result")).parallelismHint(6)
-		    .each(new Fields("aggregated_result"), new Utils.PrintFilter());
-
-		// (See what happens when we change the Spout batch size / parallelism)
+//		// Each primitive allows us to apply either filters or functions to the stream
+//		// We always have to select the input fields.
+//		topology.newStream("filter", spout).each(new Fields("text", "actor"), new PereTweetsFilter())
+//		    .each(new Fields("text", "actor"), new Utils.PrintFilter());
+//
+//		// Functions describe their output fields, which are always appended to the input fields.
+//		topology.newStream("function", spout)
+//		    .each(new Fields("text", "actor"), new UppercaseFunction(), new Fields("uppercased_text"))
+//		    .each(new Fields("text", "uppercased_text"), new Utils.PrintFilter());
+//
+//		// As you see, Each operations can be chained.
+//
+//		// Stream can be parallelized with "parallelismHint"
+//		// Parallelism hint is applied downwards until a partitioning operation (we will see this later).
+//		// This topology creates 5 spouts and 5 bolts:
+//		// Let's debug that with TridentOperationContext . partitionIndex !
+//		topology.newStream("parallel", spout).each(new Fields("text", "actor"), new PereTweetsFilter())
+//		    .parallelismHint(5).each(new Fields("text", "actor"), new Utils.PrintFilter());
+//
+//		// A stream can be partitioned in various ways.
+//		// Let's partition it by "actor". What happens with previous example?
+//		topology.newStream("parallel_and_partitioned", spout).partitionBy(new Fields("actor"))
+//		    .each(new Fields("text", "actor"), new PereTweetsFilter()).parallelismHint(5)
+//		    .each(new Fields("text", "actor"), new Utils.PrintFilter());
+//
+//		// Only one partition is filtering, which makes sense for the case.
+//		// If we remove the partitionBy we get the previous behavior.
+//
+//		// Before we have parallelism = 5 everywhere. What if we want only one spout?
+//		// We need to specify a partitioning policy for that to happen.
+//		// (We said that parallelism hint is applied downwards until a partitioning operation is found).
+//
+//		// But if we don't want to partition by any field, we can just use shuffle()
+//		// We could also choose global() - with care!
+//		topology.newStream("parallel_and_partitioned", spout).parallelismHint(1).shuffle()
+//		    .each(new Fields("text", "actor"), new PereTweetsFilter()).parallelismHint(5)
+//		    .each(new Fields("text", "actor"), new Utils.PrintFilter());
+//
+//		// Because data is batched, we can aggregate batches for efficiency.
+//		// The aggregate primitive aggregates one full batch. Useful if we want to persist the result of each batch only
+//		// once.
+//		// The aggregation for each batch is executed in a random partition as can be seen:
+//		topology.newStream("aggregation", spout).parallelismHint(1)
+//		    .aggregate(new Fields("location"), new LocationAggregator(), new Fields("aggregated_result"))
+//		    .parallelismHint(5).each(new Fields("aggregated_result"), new Utils.PrintFilter());
+//
+//		// The partitionAggregate on the other hand only executes the aggregator within one partition's part of the batch.
+//		// Let's debug that with TridentOperationContext . partitionIndex !
+//		topology
+//		    .newStream("partial_aggregation", spout)
+//		    .parallelismHint(1)
+//		    .shuffle()
+//		    .partitionAggregate(new Fields("location"), new LocationAggregator(),
+//		        new Fields("aggregated_result")).parallelismHint(6)
+//		    .each(new Fields("aggregated_result"), new Utils.PrintFilter());
+//
+//		// (See what happens when we change the Spout batch size / parallelism)
 
 		// A useful primitive is groupBy.
 		// It splits the stream into groups so that aggregations only ocurr within a group.
@@ -194,11 +196,11 @@ public class Demo {
 		return topology.build();
 	}
 
-//	public static void main(String[] args) throws Exception {
-//		Config conf = new Config();
-//
-//		LocalDRPC drpc = new LocalDRPC();
-//		LocalCluster cluster = new LocalCluster();
-//		cluster.submitTopology("hackaton", conf, buildTopology(drpc));
-//	}
+	public static void main(String[] args) throws Exception {
+		Config conf = new Config();
+
+		LocalDRPC drpc = new LocalDRPC();
+		LocalCluster cluster = new LocalCluster();
+		cluster.submitTopology("hackaton", conf, buildTopology(drpc));
+	}
 }
